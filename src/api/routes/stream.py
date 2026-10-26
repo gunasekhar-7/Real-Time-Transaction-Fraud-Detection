@@ -125,6 +125,9 @@ async def _maybe_stop_producer() -> None:
             except asyncio.CancelledError:
                 pass
             _producer_task = None
+            # Clear any residual attack events so a future reconnection doesn't
+            # replay the remainder of an old burst.
+            _attack_queue.clear()
 
 
 @router.websocket("/ws/transactions")

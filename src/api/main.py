@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from src.api.ratelimit import RateLimitMiddleware
 from src.api.routes.metrics import router as metrics_router
 from src.api.routes.predict import get_predictor, router as predict_router
-from src.api.routes.stream import router as stream_router
+from src.api.routes.stream import _maybe_stop_producer, router as stream_router
 from src.config import get_settings
 from src.observability import (
     ObservabilityMiddleware,
@@ -39,6 +39,8 @@ async def lifespan(app: FastAPI):
     if settings.auth_required:
         print("[API] X-API-Key authentication enabled for scoring and mutation routes.")
     yield
+    # Gracefully stop the stream producer so we don't leave pending tasks on shutdown.
+    await _maybe_stop_producer()
     print("[API] Shutting down.")
 
 
