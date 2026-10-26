@@ -147,7 +147,26 @@ IEEE-CIS artifacts (see `STATE.md`).
       cache/empty-folder cleanup, package/API version alignment, and a
       metadata-driven champion label in `/health`.
 
-## Backlog
+### Review fixes (production hardening)
+- [x] **Move TreeSHAP outside the global lock** — `FraudPredictor.predict_single`
+      now releases the lock before calling the read-only explainer, so concurrent
+      scoring requests are not blocked during the 10–20 ms SHAP computation.
+- [x] **Single background producer for WebSocket feed** — replaced per-connection
+      polling loops with one async producer that scores once and broadcasts to all
+      subscriber queues. Opening multiple dashboard tabs no longer duplicates
+      SHAP work or starves the event loop.
+- [x] **Proxy-aware rate limiting** — `TRUSTED_PROXIES` env var (comma-separated
+      IPs/CIDRs or `"*"`) enables `X-Forwarded-For` / `X-Real-IP` parsing so
+      genuine clients are not pooled behind a load balancer IP.
+- [x] **Monotonic virtual clock for stream replay** — `TransactionStreamGenerator`
+      now increments a virtual `TransactionDT` (~10 s/event) instead of sampling
+      raw test-set timestamps, preventing negative time deltas in the velocity
+      aggregator.
+- [x] **Route-labeled latency histogram** — `fraud_request_duration_seconds`
+      now carries `route` labels so Prometheus scrapers can chart `/predict`
+      latency independently from static assets and health checks.
+- [x] Updated regression tests for the new stream connection cap and histogram
+      labels. Suite remains at 66 tests.
 
 Not required for the current scope; these are the next real-world steps.
 

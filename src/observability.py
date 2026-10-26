@@ -167,8 +167,9 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
             elapsed = time.perf_counter() - started
             route = request.scope.get("route")
             path = getattr(route, "path", None) or "unmatched"
+            labels = {"route": path}
             increment("fraud_requests_total", {"route": path, "status": str(status_code)})
-            observe("fraud_request_duration_seconds", elapsed)
+            observe("fraud_request_duration_seconds", elapsed, labels)
             request_logger.info(
                 "request",
                 extra={

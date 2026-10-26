@@ -94,7 +94,9 @@ def test_middleware_records_route_template_not_raw_path():
     text = render_metrics()
     assert 'fraud_requests_total{route="/items/{item_id}",status="200"} 1' in text
     assert 'fraud_requests_total{route="unmatched",status="404"} 1' in text
-    assert "fraud_request_duration_seconds_count 2" in text
+    # Histogram now carries route labels; check both routes have a count
+    assert 'fraud_request_duration_seconds_count{route="/items/{item_id}"} 1' in text
+    assert 'fraud_request_duration_seconds_count{route="unmatched"} 1' in text
     assert "/missing/123" not in text
 
 

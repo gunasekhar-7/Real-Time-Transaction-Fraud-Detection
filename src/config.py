@@ -17,6 +17,13 @@ def _env_int(name: str, default: int) -> int:
         raise RuntimeError(f"{name} must be an integer") from exc
 
 
+def _env_list(name: str, default: list[str]) -> list[str]:
+    value = os.getenv(name)
+    if not value:
+        return default
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 @dataclass(frozen=True)
 class Settings:
     """Process configuration; env vars are the only inputs."""
@@ -33,6 +40,9 @@ class Settings:
     predictor_cache_size: int = 10_000
     max_accounts: int = 50_000
     max_events_per_account: int = 2_000
+    # Comma-separated list of trusted proxy IPs/CIDRs; "*" trusts all (use only behind
+    # a known ingress that sets X-Forwarded-For). Empty disables proxy header parsing.
+    trusted_proxies: Tuple[str, ...] = ()
 
     @property
     def auth_required(self) -> bool:
@@ -56,6 +66,7 @@ class Settings:
         max_accounts = _env_int("MAX_ACCOUNTS", 50_000)
         max_events = _env_int("MAX_EVENTS_PER_ACCOUNT", 2_000)
         cache_size = _env_int("PREDICTOR_CACHE_SIZE", 10_000)
+        trusted_proxies = tuple(_env_list("TRUSTED_PROXIES", []))
 
         if limit < 1:
             raise RuntimeError("RATE_LIMIT_PER_MINUTE must be at least 1")
@@ -81,6 +92,7 @@ class Settings:
             max_accounts=max_accounts,
             max_events_per_account=max_events,
             predictor_cache_size=cache_size,
+            trusted_proxies=trusted_proxies,
         )
 
 

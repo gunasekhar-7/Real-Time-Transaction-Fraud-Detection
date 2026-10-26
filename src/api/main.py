@@ -53,7 +53,11 @@ app = FastAPI(
 )
 
 # Rate limit first so the CORS middleware wraps it and 429s stay readable by browsers.
-app.add_middleware(RateLimitMiddleware, limit=settings.rate_limit_per_minute)
+app.add_middleware(
+    RateLimitMiddleware,
+    limit=settings.rate_limit_per_minute,
+    trusted_proxies=list(settings.trusted_proxies),
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.allowed_origins),

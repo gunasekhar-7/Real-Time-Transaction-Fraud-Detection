@@ -127,6 +127,7 @@ class FraudPredictor:
         A repeat of the same (account, transaction_id) reuses the first call's
         features and probability, so a gateway retry cannot change the decision.
         """
+        # Phase 1: feature transform, cache lookup, and scoring under lock
         with self._lock:
             if not self.is_ready:
                 self._load_artifacts()
@@ -164,9 +165,11 @@ class FraudPredictor:
                 "risk_tier": risk_tier,
                 "threshold_used": round(active_threshold, 3),
             }
-            if include_shap and self.explainer is not None:
-                result["explanation"] = self._explain(vector, prob)
-            return result
+
+        # Phase 2: SHAP explanation outside the lock (read-only explainer)
+        if include_shap and self.explainer is not None:
+            result["explanation"] = self._explain(vector, prob)
+        return result
 
     def _probability(self, vector: np.ndarray) -> float:
         if hasattr(self.model, "booster_"):

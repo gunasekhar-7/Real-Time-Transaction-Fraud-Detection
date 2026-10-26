@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import Set, List
+from typing import List, Dict
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 
 from src.api.schemas import AttackTriggerRequest
@@ -20,24 +20,33 @@ MAX_ATTACK_QUEUE = 500
 # The dashboard socket is public, so cap subscribers to bound work per process.
 MAX_WS_CONNECTIONS = 100
 
-# Active WebSocket subscribers
-_active_connections: Set[WebSocket] = set()
+# Active WebSocket subscriber queues (one per connection)
+_subscriber_queues: Dict[WebSocket, asyncio.Queue] = {}
 _stream_generator = TransactionStreamGenerator(random_seed=42)
 _attack_queue: List[dict] = []
 
+# Background producer task
+_producer_task: asyncio.Task | None = None
+_producer_lock = asyncio.Lock()
 
-@router.websocket("/ws/transactions")
-async def websocket_transaction_stream(websocket: WebSocket) -> None:
-    """Real-time transaction stream WebSocket for the FinTech Operator Dashboard."""
-    await websocket.accept()
-    if len(_active_connections) >= MAX_WS_CONNECTIONS:
-        await websocket.close(code=1013)
-        return
-    _active_connections.add(websocket)
+
+async def _broadcast_event(scored_event: dict) -> None:
+    """Fan out a scored event to all connected clients."""
+    disconnected = []
+    for ws, queue in _subscriber_queues.items():
+        try:
+            queue.put_nowait(scored_event)
+        except asyncio.QueueFull:
+            disconnected.append(ws)
+    for ws in disconnected:
+        _subscriber_queues.pop(ws, None)
+
+
+async def _producer_loop() -> None:
+    """Single background loop that generates, scores, and broadcasts events."""
     predictor = get_predictor()
-
     try:
-        while True:
+        while _subscriber_queues:
             # Check if an attack burst has queued items; otherwise generate standard traffic
             if _attack_queue:
                 tx_event = _attack_queue.pop(0)
@@ -68,15 +77,63 @@ async def websocket_transaction_stream(websocket: WebSocket) -> None:
                 "raw_payload": tx_event,
             }
 
-            await websocket.send_text(json.dumps(scored_event))
+            await _broadcast_event(scored_event)
 
-            # Pace the live stream to 1.5 seconds per event for human dashboard readability
+            # Pace the live stream to ~1.5 seconds per event for human dashboard readability
             await asyncio.sleep(1.2)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        global _producer_task
+        _producer_task = None
 
+
+async def _ensure_producer_started() -> None:
+    """Start the background producer if there are subscribers and it's not running."""
+    global _producer_task
+    async with _producer_lock:
+        if _subscriber_queues and (_producer_task is None or _producer_task.done()):
+            _producer_task = asyncio.create_task(_producer_loop())
+
+
+async def _maybe_stop_producer() -> None:
+    """Stop the background producer if no subscribers remain."""
+    global _producer_task
+    async with _producer_lock:
+        if not _subscriber_queues and _producer_task is not None:
+            _producer_task.cancel()
+            try:
+                await _producer_task
+            except asyncio.CancelledError:
+                pass
+            _producer_task = None
+
+
+@router.websocket("/ws/transactions")
+async def websocket_transaction_stream(websocket: WebSocket) -> None:
+    """Real-time transaction stream WebSocket for the FinTech Operator Dashboard."""
+    await websocket.accept()
+    if len(_subscriber_queues) >= MAX_WS_CONNECTIONS:
+        await websocket.close(code=1013)
+        return
+
+    # Create a per-connection queue with backpressure
+    queue: asyncio.Queue = asyncio.Queue(maxsize=50)
+    _subscriber_queues[websocket] = queue
+
+    await _ensure_producer_started()
+
+    try:
+        while True:
+            scored_event = await queue.get()
+            await websocket.send_text(json.dumps(scored_event))
     except WebSocketDisconnect:
-        _active_connections.discard(websocket)
+        pass
     except Exception:
-        _active_connections.discard(websocket)
+        pass
+    finally:
+        _subscriber_queues.pop(websocket, None)
+        await _maybe_stop_producer()
 
 
 @router.post(

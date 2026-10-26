@@ -4,6 +4,10 @@ The demo used to invent 28 PCA columns that no longer exist in the model. It now
 replays feature vectors sampled from the held-out test set, so what the dashboard
 shows is what the shipped model actually scores. Attack bursts replay real fraud
 rows rather than fabricated amounts; the model still decides, and some are missed.
+
+TransactionDT in generated events uses a monotonic virtual clock so that the
+sliding-window aggregator never sees time go backwards, even when rows are
+sampled out of chronological order from the test set.
 """
 
 from __future__ import annotations
@@ -38,7 +42,6 @@ CORE_KEYS = (
 SKIP_KEYS = {"account_id", "isFraud", "TransactionID", "TransactionDT"}
 
 TEMPLATE = {
-    "TransactionDT": 86400.0,
     "TransactionAmt": 45.0,
     "ProductCD": "W",
     "card1": 9500.0,
@@ -76,6 +79,8 @@ class TransactionStreamGenerator:
     def __init__(self, random_seed: int = 42, sample_path: str = SAMPLE_PATH) -> None:
         self.rng = np.random.default_rng(random_seed)
         self.tx_counter = 1
+        # Virtual clock: starts at 1 day in seconds, increments ~10s per event
+        self._virtual_dt = 86400.0
         self._legit: Optional[pd.DataFrame] = None
         self._fraud: Optional[pd.DataFrame] = None
 
@@ -98,8 +103,9 @@ class TransactionStreamGenerator:
 
     def _payload(self, row: Dict[str, Any]) -> Dict[str, Any]:
         self.tx_counter += 1
+        self._virtual_dt += self.rng.uniform(5.0, 15.0)  # ~10s between events
         payload = {key: row.get(key) for key in CORE_KEYS}
-        payload["TransactionDT"] = row.get("TransactionDT") or 86400.0
+        payload["TransactionDT"] = self._virtual_dt
         payload["transaction_id"] = f"tx_{self.tx_counter:07d}"
         payload["features"] = {
             key: value

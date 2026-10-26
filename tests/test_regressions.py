@@ -111,7 +111,7 @@ def test_stream_scores_with_live_thresholds():
 def test_stream_connection_cap(monkeypatch):
     from src.api.routes import stream as stream_routes
 
-    stream_routes._active_connections.clear()
+    stream_routes._subscriber_queues.clear()
     monkeypatch.setattr(stream_routes, "MAX_WS_CONNECTIONS", 1)
 
     with client.websocket_connect("/ws/transactions") as ws:

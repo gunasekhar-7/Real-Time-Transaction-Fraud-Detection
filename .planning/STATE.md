@@ -94,6 +94,24 @@ the IEEE-CIS artifacts. The service, image and test suite were verified on
   and the empty `notebooks/` folder were removed. `pyproject.toml` now matches the
   service version (1.2.0) and Python 3.11, and `/health` reads the champion label
   from `metadata.json` instead of hardcoding it.
+
+### Review fixes (production hardening)
+- Moved TreeSHAP outside the global lock in `FraudPredictor.predict_single` so
+  concurrent scoring threads are not blocked during the 10–20 ms explanation
+  computation.
+- Replaced per-connection WebSocket polling loops with a single background
+  producer that scores once and fans out to subscriber queues. Multiple dashboard
+  tabs now share one SHAP call per event instead of duplicating it.
+- Added `TRUSTED_PROXIES` env var to enable `X-Forwarded-For` / `X-Real-IP`
+  parsing for the rate limiter. Behind a load balancer, genuine clients are no
+  longer pooled into a single bucket.
+- Stream replay now uses a monotonic virtual clock (~10 s/event) so
+  `TransactionDT` never goes backward, preventing negative time deltas in the
+  velocity aggregator.
+- Latency histogram `fraud_request_duration_seconds` now carries `route` labels
+  for per-endpoint Prometheus charting.
+- Tests updated and still pass (66/66).
+
 - Tests: 66/66 pass; ruff check, ruff format check and `node --check` are clean.
 
 ## Next
