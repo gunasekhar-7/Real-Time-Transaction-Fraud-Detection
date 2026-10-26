@@ -1,0 +1,8 @@
+# Normalize text files on checkout; keep model and image artifacts byte-for-byte.
+* text=auto eol=lf
+*.pkl binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.zip binary

@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Secrets and local config
+.env
+.env.*
+.kaggle/
+
+# Data: IEEE-CIS licence forbids redistribution
+data/raw/
+data/processed/
+models/stream_sample.pkl
+*.zip
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Browser tooling
+.playwright-mcp/

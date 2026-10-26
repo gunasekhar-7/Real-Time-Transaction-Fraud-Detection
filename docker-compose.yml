@@ -1,0 +1,31 @@
+services:
+  fraud-detection-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fraud-shield-engine
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Development stays runnable with no key. Production refuses to start
+      # unless API_KEY is set and ALLOWED_ORIGINS is an explicit allow-list.
+      - APP_ENV=${APP_ENV:-development}
+      - API_KEY=${API_KEY:-}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-600}
+      - MAX_ACCOUNTS=${MAX_ACCOUNTS:-50000}
+      - MAX_EVENTS_PER_ACCOUNT=${MAX_EVENTS_PER_ACCOUNT:-2000}
+      - PREDICTOR_CACHE_SIZE=${PREDICTOR_CACHE_SIZE:-10000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3

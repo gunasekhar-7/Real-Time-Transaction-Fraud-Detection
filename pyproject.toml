@@ -1,0 +1,40 @@
+[project]
+name = "real-time-fraud-detection"
+version = "1.2.0"
+description = "Production-shaped real-time payment fraud detection service"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
+    "pydantic>=2.6.0",
+    "numpy>=1.26.0,<2.0.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.4.0",
+    "lightgbm>=4.3.0",
+    "xgboost>=2.0.3",
+    "shap>=0.45.0",
+    "httpx>=0.27.0",
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# The checks that catch real defects; formatting is enforced separately.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# conftest must set the environment before importing the app.
+"tests/conftest.py" = ["E402"]

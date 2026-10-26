@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Transaction Fraud Detection | FinTech Operator Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header Bar -->
+    <header class="header-bar">
+      <div class="brand-section">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">FRAUD-SHIELD RT</h1>
+          <div class="brand-subtitle">Real-Time Payment Security &amp; Inference Engine</div>
+        </div>
+      </div>
+      <div class="header-status-group">
+        <div class="status-badge live" id="connection-status" role="status" aria-live="polite">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span id="connection-text">CONNECTING STREAM...</span>
+        </div>
+        <div class="badge-tag" id="champion-badge">Model metrics loading&hellip;</div>
+        <div class="badge-tag">Scoring SLA &lt;25ms</div>
+      </div>
+    </header>
+
+    <!-- Top KPI Cards Grid -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Transactions Scored</div>
+        <div class="kpi-value" id="kpi-total-tx">0</div>
+        <div class="kpi-subtext">Live payment ingestion feed</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Flagged for Review Rate</div>
+        <div class="kpi-value" id="kpi-intercept-rate">0.0%</div>
+        <div class="kpi-subtext">Held or declined share of scored events</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Flagged Transaction Value</div>
+        <div class="kpi-value" id="kpi-dollars-saved">$0.00</div>
+        <div class="kpi-subtext">Amount held or blocked; not confirmed fraud</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Operating Threshold</div>
+        <div class="kpi-value" id="kpi-threshold">0.15</div>
+        <div class="kpi-subtext">Cost-optimal decline threshold</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Explained Latency</div>
+        <div class="kpi-value" id="kpi-latency">&mdash;</div>
+        <div class="kpi-subtext" id="kpi-latency-note">End-to-end, including local SHAP</div>
+      </div>
+    </section>
+
+    <!-- Main Workspace Split -->
+    <main class="workspace-grid">
+      <!-- Left Panel: Live Transaction Ingestion Feed -->
+      <section class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+            Live Ingestion Feed
+          </div>
+          <div class="feed-controls">
+            <button type="button" class="feed-btn" id="btn-pause-feed" aria-pressed="false" aria-label="Pause live feed">&#x23F8; Pause</button>
+            <button type="button" class="feed-btn" id="btn-clear-feed">&#x1F5D1; Clear</button>
+          </div>
+        </div>
+        <div class="feed-list-container" id="feed-list" role="log" aria-live="polite" aria-relevant="additions" aria-label="Live scored transactions">
+          <!-- Dynamically populated transaction rows -->
+        </div>
+      </section>
+
+      <!-- Right Panel: Modular Inspector & Simulators -->
+      <section class="panel-card">
+        <div class="panel-header">
+          <div class="tabs-bar" role="tablist" aria-label="Inspector views">
+            <button type="button" class="tab-btn active" id="tab-btn-inspector" data-tab="inspector" role="tab" aria-selected="true" aria-controls="tab-inspector">SHAP Inspector</button>
+            <button type="button" class="tab-btn" id="tab-btn-cost-sim" data-tab="cost-sim" role="tab" aria-selected="false" aria-controls="tab-cost-sim" tabindex="-1">Cost &amp; Threshold Sim</button>
+            <button type="button" class="tab-btn" id="tab-btn-benchmarks" data-tab="benchmarks" role="tab" aria-selected="false" aria-controls="tab-benchmarks" tabindex="-1">Model Benchmarks</button>
+          </div>
+        </div>
+
+        <!-- Tab 1: Transaction & SHAP Inspector -->
+        <div class="tab-content" id="tab-inspector" role="tabpanel" aria-labelledby="tab-btn-inspector" tabindex="0">
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div class="inspector-details" role="group" aria-label="Selected transaction">
+              <div class="detail-item">
+                <span class="detail-label">Transaction ID</span>
+                <span class="detail-value" id="inspect-id">tx_awaiting</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Customer ID</span>
+                <span class="detail-value" id="inspect-user">usr_00000</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Amount</span>
+                <span class="detail-value" id="inspect-amount">$0.00</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Fraud Probability</span>
+                <span class="detail-value" id="inspect-prob">0.0%</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Decision Status</span>
+                <span id="inspect-decision-badge" class="tx-decision-badge badge-approve">APPROVE</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Scoring Latency</span>
+                <span class="detail-value" id="inspect-latency">0.0ms</span>
+              </div>
+            </div>
+
+            <!-- SHAP Waterfall Feature Impact -->
+            <div class="shap-container">
+              <div class="shap-title">
+                <span>TreeSHAP Local Feature Attribution</span>
+                <span style="font-size: 0.75rem; color: var(--text-dim);">Base Score Margin</span>
+              </div>
+              <div id="shap-bars-list" style="display: flex; flex-direction: column; gap: 10px;" aria-live="polite" aria-label="Top risk factors">
+                <!-- Populated via JS -->
+              </div>
+              <div class="reason-pills" id="reason-pills-list" aria-label="SHAP risk reasons">
+                <!-- Local risk attributions -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Cost-Utility & Threshold Simulator -->
+        <div class="tab-content" id="tab-cost-sim" role="tabpanel" aria-labelledby="tab-btn-cost-sim" tabindex="0" style="display: none;">
+          <div class="simulator-controls">
+            <div class="slider-group">
+              <div class="slider-header">
+                <span style="font-size: 0.85rem; font-weight: 600;">Decision Threshold (&tau;)</span>
+                <output class="slider-val" id="slider-threshold-val" for="threshold-range-slider">0.15</output>
+              </div>
+              <input type="range" id="threshold-range-slider" min="0.05" max="0.95" step="0.02" value="0.15" aria-label="Decline decision threshold" aria-describedby="threshold-help">
+              <span id="threshold-help" style="font-size: 0.72rem; color: var(--text-dim);">
+                Lower threshold catches more fraud but increases false alarm friction. Higher threshold reduces false positives but risks chargebacks.
+              </span>
+            </div>
+
+            <div class="cost-breakdown-grid">
+              <div class="cost-stat-box">
+                <div class="cost-stat-label">Missed Fraud Loss (FN)</div>
+                <div class="cost-stat-num danger" id="sim-fn-cost">$0.00</div>
+              </div>
+              <div class="cost-stat-box">
+                <div class="cost-stat-label">Customer Friction Cost (FP)</div>
+                <div class="cost-stat-num warning" id="sim-fp-cost">$0.00</div>
+              </div>
+              <div class="cost-stat-box">
+                <div class="cost-stat-label">Fraud Dollars Prevented (TP)</div>
+                <div class="cost-stat-num success" id="sim-tp-prevented">$0.00</div>
+              </div>
+              <div class="cost-stat-box">
+                <div class="cost-stat-label">Net Financial Loss</div>
+                <div class="cost-stat-num" id="sim-total-loss" style="color: #60a5fa;">$0.00</div>
+              </div>
+            </div>
+
+            <div style="padding: 12px 16px; border-radius: var(--radius-sm); background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.25); font-size: 0.8rem; color: #c7d2fe;">
+              <strong>Financial Cost Optimization:</strong> In financial fraud, standard 99.8% accuracy is meaningless. Tuning &tau; against the financial cost matrix optimizes expected return on risk operations. Figures are offline estimates from the held-out test set, not live traffic.
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Model Benchmark Comparison -->
+        <div class="tab-content" id="tab-benchmarks" role="tabpanel" aria-labelledby="tab-btn-benchmarks" tabindex="0" style="display: none;">
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <div id="benchmark-subtitle" style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">
+              Model benchmark on held-out test set
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem;" aria-label="Model benchmark comparison">
+              <thead>
+                <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); text-align: left; color: var(--text-dim);">
+                  <th scope="col" style="padding: 8px 4px;">Model Algorithm</th>
+                  <th scope="col" style="padding: 8px 4px;">PR-AUC</th>
+                  <th scope="col" style="padding: 8px 4px;">ROC-AUC</th>
+                  <th scope="col" style="padding: 8px 4px;">Precision</th>
+                  <th scope="col" style="padding: 8px 4px;">Recall</th>
+                </tr>
+              </thead>
+              <tbody id="benchmark-tbody">
+                <!-- Populated via JS -->
+              </tbody>
+            </table>
+
+            <div style="margin-top: 10px;">
+              <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">Precision-Recall Trade-off Curve (PR-AUC)</div>
+              <svg id="pr-curve-svg" viewBox="0 0 400 180" role="img" aria-label="Precision-recall curve" style="width: 100%; height: 180px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                <!-- Dynamic SVG Curve -->
+              </svg>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Controls: Attack Simulator Bar -->
+    <section class="attack-bar">
+      <div class="attack-label-group">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--status-decline)" stroke-width="2" aria-hidden="true" focusable="false">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+        <div>
+          <div class="attack-title">Live Fraud Attack Simulator</div>
+          <div style="font-size: 0.75rem; color: var(--text-dim);">Inject coordinated fraud attack patterns into the streaming engine</div>
+        </div>
+      </div>
+      <div class="attack-btn-group">
+        <button type="button" class="attack-btn botnet" id="btn-attack-card-testing">
+          <span aria-hidden="true">&#x26A1;</span> Card Testing Botnet (20x)
+        </button>
+        <button type="button" class="attack-btn takeover" id="btn-attack-takeover">
+          <span aria-hidden="true">&#x1F6A8;</span> Account Takeover Drain
+        </button>
+        <button type="button" class="attack-btn normal" id="btn-attack-normal">
+          <span aria-hidden="true">&#x2705;</span> Normal Shopping Wave
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
