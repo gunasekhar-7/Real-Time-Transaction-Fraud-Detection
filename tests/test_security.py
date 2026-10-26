@@ -3,8 +3,10 @@
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from starlette.requests import Request
+from starlette.datastructures import Headers
 
-from src.api.ratelimit import RateLimitMiddleware, SlidingWindowLimiter
+from src.api.ratelimit import RateLimitMiddleware, SlidingWindowLimiter, _get_client_ip
 from src.api.security import require_api_key
 from src.config import get_settings
 
@@ -96,3 +98,53 @@ def test_rate_limit_middleware_returns_429():
 
     assert blocked.status_code == 429
     assert blocked.headers["Retry-After"] == "60"
+
+
+def _req(client_host: str, headers: dict) -> Request:
+    return Request(
+        {"type": "http", "client": (client_host, 12345), "headers": Headers(headers).raw}
+    )
+
+
+def test_rate_limiter_x_real_ip_precedence():
+    # X-Real-IP set by proxy should take precedence over X-Forwarded-For
+    ip = _get_client_ip(
+        _req("127.0.0.1", {"x-forwarded-for": "1.2.3.4, 5.6.7.8", "x-real-ip": "10.0.0.1"}),
+        ["127.0.0.1"],
+    )
+    assert ip == "10.0.0.1"
+
+
+def test_rate_limiter_rightmost_non_trusted_ip():
+    # Rightmost non-trusted IP in X-Forwarded-For chain
+    ip = _get_client_ip(
+        _req("127.0.0.1", {"x-forwarded-for": "1.2.3.4, 5.6.7.8, 9.10.11.12"}), ["127.0.0.1"]
+    )
+    assert ip == "9.10.11.12"
+
+
+def test_rate_limiter_all_ips_trusted_fallback():
+    # If all IPs in chain are trusted, fall back to leftmost
+    ip = _get_client_ip(
+        _req("127.0.0.1", {"x-forwarded-for": "127.0.0.1, 127.0.0.1"}), ["127.0.0.1"]
+    )
+    assert ip == "127.0.0.1"
+
+
+def test_rate_limiter_no_proxy_uses_client_host():
+    # Without trusted proxy, use direct client IP
+    ip = _get_client_ip(_req("203.0.113.50", {}), ["127.0.0.1"])
+    assert ip == "203.0.113.50"
+
+
+def test_rate_limiter_x_real_ip_only():
+    ip = _get_client_ip(_req("127.0.0.1", {"x-real-ip": "198.51.100.1"}), ["127.0.0.1"])
+    assert ip == "198.51.100.1"
+
+
+def test_rate_limiter_spoofed_xff_handled():
+    # Attacker prepends fake IPs; proxy appends real IP to the right
+    ip = _get_client_ip(
+        _req("127.0.0.1", {"x-forwarded-for": "1.2.3.4, 5.6.7.8, 203.0.113.50"}), ["127.0.0.1"]
+    )
+    assert ip == "203.0.113.50"

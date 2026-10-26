@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from typing import List, Dict
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -29,17 +30,29 @@ _attack_queue: List[dict] = []
 _producer_task: asyncio.Task | None = None
 _producer_lock = asyncio.Lock()
 
+_logger = logging.getLogger("fraud.stream")
+
 
 async def _broadcast_event(scored_event: dict) -> None:
     """Fan out a scored event to all connected clients."""
     disconnected = []
-    for ws, queue in _subscriber_queues.items():
+    # Iterate over a snapshot to avoid "dictionary changed size during iteration"
+    # if a client connects/disconnects concurrently.
+    for ws, queue in list(_subscriber_queues.items()):
         try:
             queue.put_nowait(scored_event)
         except asyncio.QueueFull:
-            disconnected.append(ws)
+            # Slow consumer: drop the oldest event to make room, then retry once.
+            # If still full, mark for disconnect.
+            try:
+                queue.get_nowait()
+                queue.put_nowait(scored_event)
+            except asyncio.QueueFull:
+                disconnected.append(ws)
     for ws in disconnected:
         _subscriber_queues.pop(ws, None)
+        # Close the WebSocket explicitly so the client handler doesn't hang.
+        asyncio.create_task(ws.close(code=1008, reason="Slow consumer"))
 
 
 async def _producer_loop() -> None:
@@ -55,9 +68,12 @@ async def _producer_loop() -> None:
                 is_fraud = _stream_generator.rng.random() < 0.015
                 tx_event = _stream_generator.generate_single_event(is_fraud=is_fraud)
 
-            # Score transaction in real time with SHAP explainability
+            # Score transaction in real time with SHAP explainability.
+            # Offload synchronous CPU-bound inference to a worker thread so we don't
+            # block the async event loop (feature calc + TreeSHAP ~15-20ms).
             t0 = time.perf_counter()
-            score_result = predictor.predict_single(
+            score_result = await asyncio.to_thread(
+                predictor.predict_single,
                 tx_event,
                 include_shap=True,
             )
@@ -83,6 +99,8 @@ async def _producer_loop() -> None:
             await asyncio.sleep(1.2)
     except asyncio.CancelledError:
         pass
+    except Exception as exc:  # pragma: no cover - defensive
+        _logger.exception("producer_loop crashed: %s", exc)
     finally:
         global _producer_task
         _producer_task = None

@@ -46,6 +46,15 @@ def test_features_are_bounded_and_scalar():
         TransactionPayload(transaction_id="x" * 129, card1=1.0, TransactionAmt=10.0)
 
 
+def test_transaction_amt_upper_bound():
+    """TransactionAmt must not exceed 1,000,000 to prevent state overflow."""
+    with pytest.raises(Exception):
+        TransactionPayload(card1=1.0, TransactionAmt=1_000_001.0)
+    # Exactly at boundary should work
+    payload = TransactionPayload(card1=1.0, TransactionAmt=1_000_000.0)
+    assert payload.TransactionAmt == 1_000_000.0
+
+
 def test_account_proxy_matches_batch_and_single_paths():
     assert account_from_values(9500.0, 299.0) == "9500|299"
     assert account_from_values(9500.0, np.nan) == "9500|-1"

@@ -26,7 +26,7 @@ class TransactionPayload(BaseModel):
         default=None, max_length=128, description="Unique transaction ID"
     )
     TransactionDT: float = Field(0.0, ge=0.0, description="Seconds from the dataset epoch")
-    TransactionAmt: float = Field(..., gt=0.0, description="Transaction amount")
+    TransactionAmt: float = Field(..., gt=0.0, le=1_000_000.0, description="Transaction amount")
 
     card1: float = Field(..., description="Card identifier")
     card2: Optional[float] = None

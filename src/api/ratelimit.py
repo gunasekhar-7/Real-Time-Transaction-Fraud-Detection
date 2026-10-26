@@ -14,11 +14,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 def _get_client_ip(request: Request, trusted_proxies: Optional[list[str]] = None) -> str:
     """Extract the real client IP, respecting proxy headers when configured.
 
-    When behind a trusted proxy (nginx, Traefik, ALB, etc.), the proxy adds
-    X-Forwarded-For with the original client IP as the first entry. We only
-    trust this header if the immediate peer (request.client.host) is in the
-    trusted_proxies list, or if trusted_proxies is "*" (trust all - use only
-    in controlled environments).
+    When behind a trusted proxy (nginx, Traefik, ALB, etc.):
+    - X-Real-IP is set by the proxy to the immediate peer (preferred, cannot be
+      spoofed by the client if the proxy overwrites it).
+    - X-Forwarded-For contains a chain: client, proxy1, proxy2, ... The proxy
+      appends the true remote address to the RIGHT. A malicious client can
+      prepend fake IPs to the LEFT. We must take the RIGHTMOST IP that is NOT
+      in our trusted_proxies list.
     """
     if not request.client:
         return "unknown"
@@ -31,16 +33,24 @@ def _get_client_ip(request: Request, trusted_proxies: Optional[list[str]] = None
     # "*" means trust all proxies (e.g., when the app only ever runs behind
     # a single known ingress that sets X-Forwarded-For)
     if trusted_proxies == ["*"] or client_host in trusted_proxies:
-        xff = request.headers.get("X-Forwarded-For")
-        if xff:
-            # First IP in the chain is the original client
-            first_ip = xff.split(",")[0].strip()
-            if first_ip:
-                return first_ip
-        # Also check X-Real-IP (nginx)
+        # 1. X-Real-IP is set by the reverse proxy to the immediate peer IP.
+        #    This is the most reliable if the proxy is configured to overwrite it.
         xri = request.headers.get("X-Real-IP")
         if xri:
             return xri.strip()
+
+        # 2. Parse X-Forwarded-For from RIGHT to LEFT, skipping trusted proxies.
+        #    The rightmost non-trusted IP is the genuine client.
+        xff = request.headers.get("X-Forwarded-For")
+        if xff:
+            ips = [ip.strip() for ip in xff.split(",")]
+            # Iterate from right to left
+            for ip in reversed(ips):
+                if ip and ip not in trusted_proxies:
+                    return ip
+            # If all IPs in the chain are trusted (unusual), fall back to leftmost
+            if ips:
+                return ips[0].strip()
 
     return client_host
 
